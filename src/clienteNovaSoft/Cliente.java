@@ -24,6 +24,7 @@ import java.security.cert.X509Certificate;
 import java.util.Date;
 
 import javax.security.auth.x500.X500Principal;
+import javax.xml.bind.DatatypeConverter;
 
 import org.bouncycastle.asn1.x509.BasicConstraints;
 import org.bouncycastle.asn1.x509.ExtendedKeyUsage;
@@ -116,8 +117,8 @@ public class Cliente extends Thread {
 				System.out.println("El servidor recibio los algoritmos con exito");
 
 				X509Certificate certificado = generarCertificado(parejaLlaves);
-
-				socket.getOutputStream().write(certificado.getEncoded());
+				output.write(certificado.getEncoded());
+				output.flush();
 				System.out.println(certificado.getEncoded());
 				System.out.println("Se envio el certificado del cliente");
 			}
@@ -130,13 +131,22 @@ public class Cliente extends Thread {
 			if(lector.readLine().contains("OK"))
 			{
 				System.out.println("ok");
-				if(lector.readLine().equals("CERTSRV"))
+				String certificadod=lector.readLine();
+				System.out.println(certificadod);
+				if(!certificadod.equals("ERROR"))
 				{
-					System.out.println("Se lee el certificado del Servidor");
-					byte[] certificado=new byte[1024];
-					input.read(certificado);
-					System.out.println(certificado);
-					X509Certificate cf = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(certificado));
+					
+					byte[] certificado2=DatatypeConverter.parseHexBinary(certificadod);
+					System.out.println("no");
+					input.read(certificado2);
+					System.out.println(DatatypeConverter.printHexBinary(certificado2));
+					InputStream bytess = new ByteArrayInputStream(certificado2);
+					CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
+					
+					System.out.println("paso 1");
+					X509Certificate cf = (X509Certificate) certFactory.generateCertificate(bytess);
+					
+					System.out.println("paso 2");
 					publica=cf.getPublicKey();
 					cf.verify((PublicKey) publica);
 					System.out.println(cf.toString());
@@ -145,7 +155,9 @@ public class Cliente extends Thread {
 				}
 				else
 				{
-					
+					System.out.println("El servidor no pudo enviar con exito");
+					escritor.close();
+					lector.close();
 				}
 				System.out.println("El servidor recibio con exito el certificado");
 
@@ -157,10 +169,17 @@ public class Cliente extends Thread {
 				System.out.println("Se recibio con exito el certificado del servidor");
 				escritor.println("OK");
 			}
+			else
+			{
+				System.out.println("El servidor no pudo recibir el certificado digital");
+				escritor.close();
+				lector.close();
+			}
+
 		}
 		catch(Exception e)
 		{
-
+			System.out.println(e.getMessage());
 		}
 	}
 	public static void main(String[] args) {

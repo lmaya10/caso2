@@ -33,6 +33,7 @@ import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyPurposeId;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.asn1.x509.X509Extensions;
+import org.bouncycastle.util.encoders.Base64;
 import org.bouncycastle.x509.X509V3CertificateGenerator;
 
 
@@ -91,6 +92,10 @@ public class Cliente extends Thread {
 		return certGen.generateX509Certificate(pair.getPrivate(), "BC");
 
 	}
+	
+	public String toHex(String arg) {
+	    return String.format("%040x", new BigInteger(1, arg.getBytes(/*YOUR_CHARSET?*/)));
+	}
 
 	public void run()
 	{
@@ -131,16 +136,23 @@ public class Cliente extends Thread {
 			if(lector.readLine().contains("OK"))
 			{
 				System.out.println("ok");
-				String certificadod=lector.readLine();
+				String certificadodd=lector.readLine();
+				byte[] hola1 = certificadodd.getBytes();
+				byte[] decoded = Base64.decode(hola1);
+				String certificadod = new String(decoded);
 				System.out.println(certificadod);
 				if(!certificadod.equals("ERROR"))
 				{
-					
-					byte[] certificado2=DatatypeConverter.parseHexBinary(certificadod);
-					System.out.println("no");
-					input.read(certificado2);
+
+					String enHexa =toHex(certificadod);
+					byte[] certificado2=DatatypeConverter.parseHexBinary(enHexa);
+					System.out.println(certificado2);
 					System.out.println(DatatypeConverter.printHexBinary(certificado2));
+//					
+//					byte[] decodeBytes = Base64.decode(certificado2);
+					
 					InputStream bytess = new ByteArrayInputStream(certificado2);
+					System.out.println("Bytess: " + bytess.toString());
 					CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
 					
 					System.out.println("paso 1");

@@ -11,6 +11,7 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
 import java.security.Security;
 import java.security.cert.X509Certificate;
 import java.util.Date;
@@ -41,13 +42,18 @@ public class Cliente extends Thread {
 
 	public Cliente ()
 	{
-		KeyPairGenerator generador = KeyPairGenerator.getInstance(asimetri);
-		generador.initialize(1024);
-		pareja = generador.generateKeyPair();
+		try {
+			KeyPairGenerator generador = KeyPairGenerator.getInstance(asimetrico);
+			generador.initialize(1024);
+			parejaLlaves = generador.generateKeyPair();
+		} catch (NoSuchAlgorithmException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
 	}
 
-	public X509Certificate generadorCertificado(KeyPair pair) throws Exception
+	public X509Certificate generarCertificado(KeyPair pair) throws Exception
 	{
 		try {
 			X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();
@@ -104,9 +110,9 @@ public class Cliente extends Thread {
 			{
 				System.out.println("El servidor recibio los algoritmos con exito");
 				
-				 Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
-
-				    
+				X509Certificate certificado = generarCertificado(parejaLlaves);
+				socket.getOutputStream().write(certificado.getEncoded());
+				
 				System.out.println("Se envio el certificado del cliente");
 			}
 			else
@@ -118,7 +124,9 @@ public class Cliente extends Thread {
 			if(lector.readLine().contains("OK"))
 			{
 				System.out.println("El servidor recibio con exito el certificado");
-				//Recibir certificado del servidor
+				
+				
+				
 				System.out.println("Se recibio con exito el certificado del servidor");
 				escritor.println("OK");
 			}

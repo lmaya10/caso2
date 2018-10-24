@@ -1,6 +1,7 @@
 package clienteNovaSoft;
 
 import java.io.BufferedReader;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -10,10 +11,12 @@ import java.math.BigInteger;
 import java.net.Socket;
 import java.net.UnknownHostException;
 import java.security.InvalidKeyException;
+import java.security.Key;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.PublicKey;
 import java.security.Security;
 import java.security.SignatureException;
 import java.security.cert.CertificateFactory;
@@ -31,6 +34,8 @@ import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.asn1.x509.X509Extensions;
 import org.bouncycastle.x509.X509V3CertificateGenerator;
 
+
+
 public class Cliente extends Thread {
 	static String IP="localhost";
 	static int puerto=123;
@@ -41,6 +46,7 @@ public class Cliente extends Thread {
 	static String asimetrico = "RSA";
 	static String hmac = "HMACMD5";
 	static Comunicacion comunicacion;
+	static Key publica=null;
 
 	private KeyPair parejaLlaves;
 
@@ -60,28 +66,28 @@ public class Cliente extends Thread {
 	@SuppressWarnings("deprecation")
 	public X509Certificate generarCertificado(KeyPair pair) throws InvalidKeyException, NoSuchProviderException, SecurityException, SignatureException
 	{
+		Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
+
 		X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();
 
-//		certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
-//		certGen.setIssuerDN(new X500Principal("CN=Test Certificate"));
-//		certGen.setNotBefore(new Date(System.currentTimeMillis() - 10000));
-//		certGen.setNotAfter(new Date(System.currentTimeMillis() + 10000));
-//		certGen.setSubjectDN(new X500Principal("CN=Test Certificate"));
-//		certGen.setPublicKey(pair.getPublic());
-//		certGen.setSignatureAlgorithm("SHA256WithRSAEncryption");
+		certGen.setSerialNumber(BigInteger.valueOf(System.currentTimeMillis()));
+		certGen.setIssuerDN(new X500Principal("CN=Test Certificate"));
+		certGen.setNotBefore(new Date(System.currentTimeMillis() - 10000));
+		certGen.setNotAfter(new Date(System.currentTimeMillis() + 10000));
+		certGen.setSubjectDN(new X500Principal("CN=Test Certificate"));
+		certGen.setPublicKey(pair.getPublic());
+		certGen.setSignatureAlgorithm("SHA256WithRSAEncryption");
 
-		//			certGen.addExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(false));
-		//			certGen.addExtension(X509Extensions.KeyUsage, true, new KeyUsage(KeyUsage.digitalSignature
-		//					| KeyUsage.keyEncipherment));
-		//			certGen.addExtension(X509Extensions.ExtendedKeyUsage, true, new ExtendedKeyUsage(
-		//					KeyPurposeId.id_kp_serverAuth));
-		//
-		//			certGen.addExtension(X509Extensions.SubjectAlternativeName, false, new GeneralNames(
-		//					new GeneralName(GeneralName.rfc822Name, "test@test.test")));
+		certGen.addExtension(X509Extensions.BasicConstraints, true, new BasicConstraints(false));
+		certGen.addExtension(X509Extensions.KeyUsage, true, new KeyUsage(KeyUsage.digitalSignature
+				| KeyUsage.keyEncipherment));
+		certGen.addExtension(X509Extensions.ExtendedKeyUsage, true, new ExtendedKeyUsage(
+				KeyPurposeId.id_kp_serverAuth));
 
-		X509Certificate certificado = certGen.generateX509Certificate(pair.getPrivate(), "BC");
+		certGen.addExtension(X509Extensions.SubjectAlternativeName, false, new GeneralNames(
+				new GeneralName(GeneralName.rfc822Name, "test@test.test")));
 
-		return certificado;
+		return certGen.generateX509Certificate(pair.getPrivate(), "BC");
 
 	}
 
@@ -110,8 +116,9 @@ public class Cliente extends Thread {
 				System.out.println("El servidor recibio los algoritmos con exito");
 
 				X509Certificate certificado = generarCertificado(parejaLlaves);
-//				socket.getOutputStream().write(certificado.getEncoded());
 
+				socket.getOutputStream().write(certificado.getEncoded());
+				System.out.println(certificado.getEncoded());
 				System.out.println("Se envio el certificado del cliente");
 			}
 			else
@@ -122,10 +129,29 @@ public class Cliente extends Thread {
 			}
 			if(lector.readLine().contains("OK"))
 			{
+				System.out.println("ok");
+				if(lector.readLine().equals("CERTSRV"))
+				{
+					System.out.println("Se lee el certificado del Servidor");
+					byte[] certificado=new byte[1024];
+					input.read(certificado);
+					System.out.println(certificado);
+					X509Certificate cf = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(new ByteArrayInputStream(certificado));
+					publica=cf.getPublicKey();
+					cf.verify((PublicKey) publica);
+					System.out.println(cf.toString());
+					escritor.println("OK");
+					System.out.println("Dice ok");
+				}
+				else
+				{
+					
+				}
 				System.out.println("El servidor recibio con exito el certificado");
 
-				CertificateFactory cf = CertificateFactory.getInstance("X.509");
-				X509Certificate cert = (X509Certificate) cf.generateCertificate(input);
+				System.out.println("lo que recibio del servidor es"+lector.readLine());
+				System.out.println("lo que recibio despues del servidor es"+lector.readLine());
+				
 
 
 				System.out.println("Se recibio con exito el certificado del servidor");
@@ -136,5 +162,9 @@ public class Cliente extends Thread {
 		{
 
 		}
+	}
+	public static void main(String[] args) {
+		Cliente c = new Cliente();
+		c.start();
 	}
 }

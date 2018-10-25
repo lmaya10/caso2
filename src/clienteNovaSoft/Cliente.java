@@ -2,19 +2,16 @@ package clienteNovaSoft;
 
 import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.math.BigInteger;
 import java.net.Socket;
-import java.net.UnknownHostException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PublicKey;
@@ -22,11 +19,7 @@ import java.security.Security;
 import java.security.SignatureException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.sql.DataTruncation;
 import java.util.Date;
-import java.util.Random;
-import java.util.concurrent.SynchronousQueue;
-
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
 import javax.crypto.SecretKey;
@@ -41,11 +34,11 @@ import org.bouncycastle.asn1.x509.GeneralNames;
 import org.bouncycastle.asn1.x509.KeyPurposeId;
 import org.bouncycastle.asn1.x509.KeyUsage;
 import org.bouncycastle.asn1.x509.X509Extensions;
-import org.bouncycastle.util.encoders.Base64;
 import org.bouncycastle.x509.X509V3CertificateGenerator;
 
 
 
+@SuppressWarnings("deprecation")
 public class Cliente extends Thread {
 	static String IP="localhost";
 	static int puerto=123;
@@ -76,7 +69,6 @@ public class Cliente extends Thread {
 
 	}
 
-	@SuppressWarnings("deprecation")
 	public X509Certificate generarCertificado(KeyPair pair) throws InvalidKeyException, NoSuchProviderException, SecurityException, SignatureException
 	{
 		Security.addProvider(new org.bouncycastle.jce.provider.BouncyCastleProvider());
@@ -118,9 +110,7 @@ public class Cliente extends Thread {
 			OutputStream output=socket.getOutputStream();
 			escritor = new PrintWriter(output, true);
 			lector = new BufferedReader(new InputStreamReader(input));
-			BufferedReader lectorPropio = new BufferedReader(new InputStreamReader(System.in));
-
-
+			
 			//Hola para dar inicio
 			escritor.println("HOLA");
 			//Algoritmos
@@ -198,10 +188,11 @@ public class Cliente extends Thread {
 			if(lector.readLine().contains("OK"))
 			{
 				//Creacion numero consulta
-				Integer numeroConsulta = (int) (Math.random()*3292182);
+				Integer numeroConsulta = (int) (Math.random()*9999900);
 				System.out.println("Numero Consulta: " + numeroConsulta);
-				BigInteger bigInt = BigInteger.valueOf(numeroConsulta);
-				byte[] numByte = bigInt.toByteArray();
+				
+				String numLetras = numeroConsulta.toString();
+				byte[] numByte = numLetras.getBytes();
 				
 				//Cifrar consulta simetrica
 				llaveSimetrica = new SecretKeySpec(llaveDescifradaBytes, simetrico);
@@ -214,15 +205,11 @@ public class Cliente extends Thread {
 				byte[] llaveMac = getLlaveDigest(numByte);
 				System.out.println(llaveMac);
 				
-//				byte[] llaveMac = hashCryptoCode(numeroCif);
-//				System.out.println(llaveMac);
-//				byte[] llaveMac = getDigest(hmac, numByte);
-//				System.out.println(llaveMac);
-				
-//				byte[] hmacCif = cSimetrico.cifrar(llaveMac);
-//				String mensajeMacNumero = DatatypeConverter.printHexBinary(hmacCif);
 				String mensajeMacNumero = DatatypeConverter.printHexBinary(llaveMac);
 				escritor.println(mensajeMacNumero);
+				System.out.println("MAC NUMERO: " + mensajeMacNumero);
+				System.out.println("NUMERO CIF " + mensajeNumero);
+				System.out.println("LLAVE SIM: " + DatatypeConverter.printHexBinary(llaveDescifradaBytes));
 				
 			}
 			else
@@ -275,36 +262,6 @@ public class Cliente extends Thread {
 	    byte[] bytes = mac.doFinal(buffer);
 	    return bytes;
 	}
-	
-	private byte[] hashCryptoCode(byte[] datos) {
-		try {
-			String algoritmo = "Hmac" + hmac.split("HMAC")[1];
-			System.out.println(algoritmo);
-			SecretKeySpec key = new SecretKeySpec(this.llaveSimetrica.getEncoded(),
-					algoritmo);
-			Mac mac = Mac.getInstance(algoritmo);
-			mac.init(key);
-			byte[] rawHmac = mac.doFinal(datos);
-			return rawHmac;
-		} catch (Exception e) {
-			e.printStackTrace();
-			return null;
-		}
-	}
-	
-	private byte[] getDigest(String algorithm, byte[] buffer) {
-		try {
-			String algoritmo = hmac.split("HMAC")[1];
-			System.out.println(algoritmo);
-			MessageDigest digest = MessageDigest.getInstance(algoritmo);
-			digest.update(buffer);
-			return digest.digest();
-		} catch (Exception e) {
-			System.out.println(e.getMessage());
-			return null;
-		}
-	}
-
 
 	public static void main(String[] args) {
 		Cliente c = new Cliente();

@@ -18,7 +18,6 @@ public class ClientePrueba extends Thread{
 	static String simetrico = "AES";
 	static String asimetrico = "RSA";
 	static String hmac = "HMACMD5";
-	static Comunicacion comunicacion;
 	static Key publicaServ=null;
 
 	public ClientePrueba()

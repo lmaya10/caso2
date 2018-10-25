@@ -14,6 +14,7 @@ import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PublicKey;
@@ -23,7 +24,13 @@ import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
 import java.sql.DataTruncation;
 import java.util.Date;
+import java.util.Random;
+import java.util.concurrent.SynchronousQueue;
 
+import javax.crypto.Cipher;
+import javax.crypto.Mac;
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import javax.security.auth.x500.X500Principal;
 import javax.xml.bind.DatatypeConverter;
 
@@ -48,22 +55,19 @@ public class Cliente extends Thread {
 	static String simetrico = "AES";
 	static String asimetrico = "RSA";
 	static String hmac = "HMACMD5";
-	static Comunicacion comunicacion;
 	static Key publicaServ=null;
 	
-	private CifradorAsimetrico cAsimetrico;
 	private CifradorSimetrico cSimetrico;
-
+	private SecretKey llaveSimetrica;
 	private KeyPair parejaLlaves;
 
 	public Cliente ()
 	{
 		try {
 			KeyPairGenerator generador = KeyPairGenerator.getInstance(asimetrico);
-			generador.initialize(2048);
+			generador.initialize(1024);
 			parejaLlaves = generador.generateKeyPair();
 			
-			cAsimetrico = new CifradorAsimetrico(parejaLlaves);
 			cSimetrico = new CifradorSimetrico();
 		} catch (NoSuchAlgorithmException e) {
 			// TODO Auto-generated catch block
@@ -127,7 +131,7 @@ public class Cliente extends Thread {
 			}
 			else
 			{
-				System.out.println("El servidor no pudo recibir los algoritmos con exito");
+				System.out.println("Error, Deberia recibir HOLA");
 				escritor.close();
 				lector.close();
 			}
@@ -148,7 +152,7 @@ public class Cliente extends Thread {
 			}
 			else
 			{
-				System.out.println("El servidor no pudo recibir el certificado digital");
+				System.out.println("No se enviaron los algoritmos correctamente");
 				escritor.close();
 				lector.close();
 			}
@@ -169,36 +173,61 @@ public class Cliente extends Thread {
 			}
 			else
 			{
-				System.out.println("El servidor no pudo enviar con exito");
+				System.out.println("No se envio el certificado con exito");
 				escritor.close();
 				lector.close();
 			}
+			
 			System.out.println("Se recibio con exito el certificado del servidor");
 			
 			
 			//Recibir llave simetrica
 			String llaveSimetricaCifrada = lector.readLine();
-			System.out.println(llaveSimetricaCifrada.length());
-			byte[] llaveBytes = llaveSimetricaCifrada.getBytes();
-			byte[] llaveDescifradaBytes = cAsimetrico.descifrar(llaveBytes);
+			byte[] llaveCifByte = DatatypeConverter.parseHexBinary(llaveSimetricaCifrada);
 			
-			
-//			String llaveDescifrada = new String(llaveDescifradaBytes);
-//			System.out.println(llaveDescifrada);
-			
+			System.out.println(llaveCifByte.length);
+			byte[] llaveDescifradaBytes = descifrarAsimetrico(llaveCifByte, parejaLlaves.getPrivate());
 			
 			//Enviar llave simetrica
-//			String llaveCifrada = llaveSimetricaCifrada;
-//			escritor.println(llaveCifrada);
+			
+			byte[] llaveCifSer = cifrarAsimetrico(llaveDescifradaBytes, publicaServ);
+			String llaveCifMensaje = DatatypeConverter.printHexBinary(llaveCifSer);
+			escritor.println(llaveCifMensaje);
 
-//			if(lector.readLine().contains("OK"))
-//			{
-//				
-//			}
-//			else
-//			{
-//				System.out.println("El servidor no respondio haber recibido la llave");
-//			}
+			//Enviar consulta
+			if(lector.readLine().contains("OK"))
+			{
+				//Creacion numero consulta
+				Integer numeroConsulta = (int) (Math.random()*3292182);
+				System.out.println("Numero Consulta: " + numeroConsulta);
+				BigInteger bigInt = BigInteger.valueOf(numeroConsulta);
+				byte[] numByte = bigInt.toByteArray();
+				
+				//Cifrar consulta simetrica
+				llaveSimetrica = new SecretKeySpec(llaveDescifradaBytes, simetrico);
+				cSimetrico.setKey(llaveSimetrica);
+				byte[] numeroCif = cSimetrico.cifrar(numByte);
+				String mensajeNumero = DatatypeConverter.printHexBinary(numeroCif);
+				escritor.println(mensajeNumero);
+				
+				//Hmac
+				byte[] llaveMac = getLlaveDigest(numByte);
+				System.out.println(llaveMac);
+				byte[] llaveMac3 = hashCryptoCode(numByte);
+				System.out.println(llaveMac3);
+				byte[] llaveMac2 = getDigest(hmac, numByte);
+				System.out.println(llaveMac2);
+				String mensajeMacNumero = DatatypeConverter.printHexBinary(llaveMac);
+				escritor.println(mensajeMacNumero);
+			}
+			else
+			{
+				System.out.println("El servidor no respondio haber recibido la llave");
+			}
+			
+			System.out.println("HOLA ACA");
+			String finale = lector.readLine();
+			System.out.println(finale);
 
 		}		
 		catch(Exception e)
@@ -207,6 +236,78 @@ public class Cliente extends Thread {
 			System.out.println(e.getMessage());
 		}
 	}
+	
+	public byte[] cifrarAsimetrico(byte[] clearText, Key kPublica) {
+		try {
+			Cipher cipher = Cipher.getInstance(asimetrico);
+			cipher.init(Cipher.ENCRYPT_MODE, kPublica);
+			byte[] cipheredText = cipher.doFinal(clearText);
+			return cipheredText;
+		} catch (Exception e) {
+			System.out.println("Excepcion: " + e.getMessage());
+			return null;
+		}
+	}
+	
+	public byte[] descifrarAsimetrico(byte[] cipheredText, Key kPrivada) {
+		try {
+			Cipher cipher = Cipher.getInstance(asimetrico);
+			cipher.init(Cipher.DECRYPT_MODE, kPrivada);
+			
+			System.out.println("LONGITUD: " + cipheredText.length);
+			byte[] clearText = cipher.doFinal(cipheredText);
+			
+			return clearText;
+		} catch (Exception e) {
+			System.out.println("Excepcion: " + e.getMessage());
+			return null;
+		}
+	}
+	
+	public byte[] getLlaveDigest(byte[] buffer) throws Exception{
+		Mac mac = Mac.getInstance(hmac);
+	    mac.init(llaveSimetrica);
+	    byte[] bytes = mac.doFinal(buffer);
+	    return bytes;
+	}
+	
+	private byte[] hashCryptoCode(byte[] datos) {
+		try {
+			String algoritmo = "Hmac" + hmac.split("HMAC")[1];
+			SecretKeySpec key = new SecretKeySpec(this.llaveSimetrica.getEncoded(),
+					algoritmo);
+			Mac mac = Mac.getInstance(algoritmo);
+			mac.init(key);
+			byte[] rawHmac = mac.doFinal(datos);
+			return rawHmac;
+		} catch (Exception e) {
+			e.printStackTrace();
+			return null;
+		}
+	}
+	
+	private byte[] getDigest(String algorithm, byte[] buffer) {
+		try {
+			String algo = null;
+			if(algorithm.equals("HMACMD5"))
+			{
+				algo = "MD5";
+			}
+			else if(algorithm.equals("HMACSHA1"))
+			{
+				algo = "SHA-1";
+			}
+			
+			
+			MessageDigest digest = MessageDigest.getInstance(algo);
+			digest.update(buffer);
+			return digest.digest();
+		} catch (Exception e) {
+			return null;
+		}
+	}
+
+
 	public static void main(String[] args) {
 		Cliente c = new Cliente();
 		c.start();

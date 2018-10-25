@@ -21,6 +21,7 @@ import java.security.Security;
 import java.security.SignatureException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.sql.DataTruncation;
 import java.util.Date;
 
 import javax.security.auth.x500.X500Principal;
@@ -48,7 +49,10 @@ public class Cliente extends Thread {
 	static String asimetrico = "RSA";
 	static String hmac = "HMACMD5";
 	static Comunicacion comunicacion;
-	static Key publica=null;
+	static Key publicaServ=null;
+	
+	private CifradorAsimetrico cAsimetrico;
+	private CifradorSimetrico cSimetrico;
 
 	private KeyPair parejaLlaves;
 
@@ -56,8 +60,11 @@ public class Cliente extends Thread {
 	{
 		try {
 			KeyPairGenerator generador = KeyPairGenerator.getInstance(asimetrico);
-			generador.initialize(1024);
+			generador.initialize(2048);
 			parejaLlaves = generador.generateKeyPair();
+			
+			cAsimetrico = new CifradorAsimetrico(parejaLlaves);
+			cSimetrico = new CifradorSimetrico();
 		} catch (NoSuchAlgorithmException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -92,9 +99,9 @@ public class Cliente extends Thread {
 		return certGen.generateX509Certificate(pair.getPrivate(), "BC");
 
 	}
-	
+
 	public String toHex(String arg) {
-	    return String.format("%040x", new BigInteger(1, arg.getBytes(/*YOUR_CHARSET?*/)));
+		return String.format("%040x", new BigInteger(1, arg.getBytes(/*YOUR_CHARSET?*/)));
 	}
 
 	public void run()
@@ -112,20 +119,11 @@ public class Cliente extends Thread {
 
 			//Hola para dar inicio
 			escritor.println("HOLA");
+			//Algoritmos
 			if(lector.readLine().contains("OK"))
 			{
 				escritor.println("ALGORITMOS:"+simetrico+":"+asimetrico+":"+ hmac);
 				System.out.println("Se enviaron algoritmos algoritmos con exito");
-			}
-			if(lector.readLine().contains("OK"))
-			{
-				System.out.println("El servidor recibio los algoritmos con exito");
-
-				X509Certificate certificado = generarCertificado(parejaLlaves);
-				output.write(certificado.getEncoded());
-				output.flush();
-				System.out.println(certificado.getEncoded());
-				System.out.println("Se envio el certificado del cliente");
 			}
 			else
 			{
@@ -133,53 +131,20 @@ public class Cliente extends Thread {
 				escritor.close();
 				lector.close();
 			}
+			//Certificado cliente
 			if(lector.readLine().contains("OK"))
 			{
-				System.out.println("ok");
-				String certificadodd=lector.readLine();
-				byte[] hola1 = certificadodd.getBytes();
-				byte[] decoded = Base64.decode(hola1);
-				String certificadod = new String(decoded);
-				System.out.println(certificadod);
-				if(!certificadod.equals("ERROR"))
-				{
+				System.out.println("El servidor recibio los algoritmos con exito");
 
-					String enHexa =toHex(certificadod);
-					byte[] certificado2=DatatypeConverter.parseHexBinary(enHexa);
-					System.out.println(certificado2);
-					System.out.println(DatatypeConverter.printHexBinary(certificado2));
-//					
-//					byte[] decodeBytes = Base64.decode(certificado2);
-					
-					InputStream bytess = new ByteArrayInputStream(certificado2);
-					System.out.println("Bytess: " + bytess.toString());
-					CertificateFactory certFactory = CertificateFactory.getInstance("X.509");
-					
-					System.out.println("paso 1");
-					X509Certificate cf = (X509Certificate) certFactory.generateCertificate(bytess);
-					
-					System.out.println("paso 2");
-					publica=cf.getPublicKey();
-					cf.verify((PublicKey) publica);
-					System.out.println(cf.toString());
-					escritor.println("OK");
-					System.out.println("Dice ok");
-				}
-				else
-				{
-					System.out.println("El servidor no pudo enviar con exito");
-					escritor.close();
-					lector.close();
-				}
-				System.out.println("El servidor recibio con exito el certificado");
+				X509Certificate certificado = generarCertificado(parejaLlaves);
+				byte[] certificadoEnBytes = certificado.getEncoded();
+				String certificadoEnString = DatatypeConverter.printHexBinary(certificadoEnBytes);
+				System.out.println("Mi certificado: " + certificadoEnString);
+				escritor.println(certificadoEnString);
+				byte[] pruebaByte = DatatypeConverter.parseHexBinary(certificadoEnString);
+				System.out.println("MI CERTIFICADO BYTE: " + pruebaByte.toString());
 
-				System.out.println("lo que recibio del servidor es"+lector.readLine());
-				System.out.println("lo que recibio despues del servidor es"+lector.readLine());
-				
-
-
-				System.out.println("Se recibio con exito el certificado del servidor");
-				escritor.println("OK");
+				System.out.println("Se envio el certificado del cliente");
 			}
 			else
 			{
@@ -188,9 +153,57 @@ public class Cliente extends Thread {
 				lector.close();
 			}
 
-		}
+			//Certificado servidor
+			if(lector.readLine().contains("OK"))
+			{
+				String certString = lector.readLine();
+				byte[] certServ = DatatypeConverter.parseHexBinary(certString);
+				ByteArrayInputStream inStreamByte = new ByteArrayInputStream(certServ);
+				X509Certificate cdServ = (X509Certificate) CertificateFactory.getInstance("X.509").generateCertificate(inStreamByte);
+
+				publicaServ =cdServ.getPublicKey();
+				cdServ.verify((PublicKey) publicaServ);
+				System.out.println(cdServ.toString());
+				escritor.println("OK");
+				System.out.println("Dice ok");
+			}
+			else
+			{
+				System.out.println("El servidor no pudo enviar con exito");
+				escritor.close();
+				lector.close();
+			}
+			System.out.println("Se recibio con exito el certificado del servidor");
+			
+			
+			//Recibir llave simetrica
+			String llaveSimetricaCifrada = lector.readLine();
+			System.out.println(llaveSimetricaCifrada.length());
+			byte[] llaveBytes = llaveSimetricaCifrada.getBytes();
+			byte[] llaveDescifradaBytes = cAsimetrico.descifrar(llaveBytes);
+			
+			
+//			String llaveDescifrada = new String(llaveDescifradaBytes);
+//			System.out.println(llaveDescifrada);
+			
+			
+			//Enviar llave simetrica
+//			String llaveCifrada = llaveSimetricaCifrada;
+//			escritor.println(llaveCifrada);
+
+//			if(lector.readLine().contains("OK"))
+//			{
+//				
+//			}
+//			else
+//			{
+//				System.out.println("El servidor no respondio haber recibido la llave");
+//			}
+
+		}		
 		catch(Exception e)
 		{
+			e.printStackTrace();
 			System.out.println(e.getMessage());
 		}
 	}

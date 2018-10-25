@@ -213,12 +213,17 @@ public class Cliente extends Thread {
 				//Hmac
 				byte[] llaveMac = getLlaveDigest(numByte);
 				System.out.println(llaveMac);
-				byte[] llaveMac3 = hashCryptoCode(numByte);
-				System.out.println(llaveMac3);
-				byte[] llaveMac2 = getDigest(hmac, numByte);
-				System.out.println(llaveMac2);
+				
+//				byte[] llaveMac = hashCryptoCode(numeroCif);
+//				System.out.println(llaveMac);
+//				byte[] llaveMac = getDigest(hmac, numByte);
+//				System.out.println(llaveMac);
+				
+//				byte[] hmacCif = cSimetrico.cifrar(llaveMac);
+//				String mensajeMacNumero = DatatypeConverter.printHexBinary(hmacCif);
 				String mensajeMacNumero = DatatypeConverter.printHexBinary(llaveMac);
 				escritor.println(mensajeMacNumero);
+				
 			}
 			else
 			{
@@ -274,6 +279,7 @@ public class Cliente extends Thread {
 	private byte[] hashCryptoCode(byte[] datos) {
 		try {
 			String algoritmo = "Hmac" + hmac.split("HMAC")[1];
+			System.out.println(algoritmo);
 			SecretKeySpec key = new SecretKeySpec(this.llaveSimetrica.getEncoded(),
 					algoritmo);
 			Mac mac = Mac.getInstance(algoritmo);
@@ -288,21 +294,13 @@ public class Cliente extends Thread {
 	
 	private byte[] getDigest(String algorithm, byte[] buffer) {
 		try {
-			String algo = null;
-			if(algorithm.equals("HMACMD5"))
-			{
-				algo = "MD5";
-			}
-			else if(algorithm.equals("HMACSHA1"))
-			{
-				algo = "SHA-1";
-			}
-			
-			
-			MessageDigest digest = MessageDigest.getInstance(algo);
+			String algoritmo = hmac.split("HMAC")[1];
+			System.out.println(algoritmo);
+			MessageDigest digest = MessageDigest.getInstance(algoritmo);
 			digest.update(buffer);
 			return digest.digest();
 		} catch (Exception e) {
+			System.out.println(e.getMessage());
 			return null;
 		}
 	}
